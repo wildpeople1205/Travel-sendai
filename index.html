@@ -46,11 +46,6 @@
         input:focus, select:focus, textarea:focus { outline: none; border-color: #2DD4BF; ring: 2px; box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.2); }
         .line-through-gray { text-decoration: line-through; color: #9CA3AF; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-
-        /* Swipe 樣式 */
-        .swipe-item-container { position: relative; overflow: hidden; user-select: none; }
-        .swipe-actions { position: absolute; top: 0; bottom: 0; right: 0; display: flex; z-index: 0; }
-        .swipe-content { position: relative; z-index: 10; background-color: white; transition: transform 0.2s ease-out; will-change: transform; }
     </style>
 </head>
 <body class="text-slate-600">
@@ -101,11 +96,14 @@
             <transition name="fade">
                 <div v-if="currentTab === 'itinerary'" class="h-full flex flex-col">
                     <div class="p-5 pb-24 space-y-4">
-                        <div v-if="getItineraryForSelectedDate().length === 0" class="text-center py-10 text-slate-400">
+                        <div v-if="isLoading" class="text-center py-10 text-slate-400 animate-pulse">
+                             資料同步中...
+                        </div>
+                        <div v-else-if="getItineraryForSelectedDate().length === 0" class="text-center py-10 text-slate-400">
                             <i class="fas fa-map-marked-alt text-4xl mb-3 text-slate-200"></i>
                             <p>無行程，點擊右下角新增</p>
                         </div>
-                        <div v-for="(item, idx) in getItineraryForSelectedDate()" :key="item.id" class="group bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative overflow-hidden transition-all hover:shadow-md">
+                        <div v-for="(item, idx) in getItineraryForSelectedDate()" :key="item.id" class="group bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative hover:shadow-md">
                             <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="getTypeColorClass(item.type)"></div>
                             <div class="flex justify-between items-start pl-3">
                                 <div class="flex-1 pr-2">
@@ -151,44 +149,33 @@
                     <div class="bg-gradient-to-r from-orange-300 to-orange-400 p-4 rounded-2xl text-white shadow-lg flex justify-between items-center">
                         <div>
                             <h2 class="font-bold text-lg"><i class="fas fa-star mr-2"></i>必買/必吃</h2>
-                            <p class="text-xs opacity-90 mt-1">左滑可刪除項目</p>
+                            <p class="text-xs opacity-90 mt-1">點擊筆圖示可編輯/刪除</p>
                         </div>
                         <button @click="addRegion" class="bg-white/20 hover:bg-white/30 p-2 rounded-lg text-sm transition"><i class="fas fa-folder-plus"></i> 新增區域</button>
                     </div>
-                    <div v-for="(region, rIdx) in mustBuyList" :key="region.id || rIdx" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
+                    <div v-if="isLoading" class="text-center text-slate-400">載入中...</div>
+                    <div v-else v-for="(region, rIdx) in mustBuyList" :key="region.id || rIdx" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
                         <div class="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
                             <div class="flex items-center space-x-2">
                                 <h3 class="font-bold text-slate-700">{{ region.area }}</h3>
-                                <button @click="editRegionName(region, rIdx)" class="text-slate-300 hover:text-lake text-xs"><i class="fas fa-pen"></i></button>
+                                <button @click="editRegionName(region)" class="text-slate-300 hover:text-lake text-xs"><i class="fas fa-pen"></i></button>
                             </div>
                             <div class="flex items-center space-x-2">
-                                <button @click="openMustBuyModal(region.id, rIdx)" class="text-xs bg-white text-lake border border-lake px-2 py-1 rounded-full hover:bg-lake hover:text-white transition"><i class="fas fa-plus"></i> 新增</button>
+                                <button @click="openMustBuyModal(region.id)" class="text-xs bg-white text-lake border border-lake px-2 py-1 rounded-full hover:bg-lake hover:text-white transition"><i class="fas fa-plus"></i> 新增</button>
                                 <button @click="deleteRegion(region.id, rIdx)" class="text-slate-300 hover:text-red-400 px-1"><i class="fas fa-trash"></i></button>
                             </div>
                         </div>
                         <div class="divide-y divide-slate-50">
-                            <div v-for="(item, iIdx) in region.items" :key="iIdx" class="swipe-item-container bg-white">
-                                <div class="swipe-actions">
-                                    <button @click="deleteMustBuyItem(region.id, item, rIdx, iIdx)" class="bg-red-500 text-white w-20 flex items-center justify-center font-bold h-full absolute right-0">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                            <div v-for="(item, iIdx) in region.items" :key="iIdx" class="p-4 flex items-start space-x-3 group">
+                                <div class="w-10 h-10 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">{{ item.icon || '🛍️' }}</div>
+                                <div class="flex-1 pr-2">
+                                    <h4 class="font-bold text-slate-800 text-sm">{{ item.name }}</h4>
+                                    <p class="text-xs text-slate-400 mt-0.5">{{ item.desc }}</p>
+                                    <p v-if="item.address" class="text-[10px] text-slate-300 mt-1 flex items-start"><i class="fas fa-map-marker-alt mr-1 mt-0.5"></i> {{ item.address }}</p>
                                 </div>
-                                <div class="swipe-content p-4 flex items-start space-x-3" 
-                                     :style="{ transform: 'translateX(' + (item.swipeOffset || 0) + 'px)' }"
-                                     @touchstart="touchStart($event, item)" 
-                                     @touchmove="touchMove($event, item)" 
-                                     @touchend="touchEnd($event, item)">
-                                    
-                                    <div class="w-10 h-10 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">{{ item.icon || '🛍️' }}</div>
-                                    <div class="flex-1 pr-2">
-                                        <h4 class="font-bold text-slate-800 text-sm">{{ item.name }}</h4>
-                                        <p class="text-xs text-slate-400 mt-0.5">{{ item.desc }}</p>
-                                        <p v-if="item.address" class="text-[10px] text-slate-300 mt-1 flex items-start"><i class="fas fa-map-marker-alt mr-1 mt-0.5"></i> {{ item.address }}</p>
-                                    </div>
-                                    <div class="flex flex-col space-y-2 items-center justify-center">
-                                        <a :href="getGoogleMapsLink(item.name + ' ' + (item.address || ''))" target="_blank" class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-500 hover:text-white transition-colors flex-shrink-0"><i class="fas fa-location-arrow text-xs"></i></a>
-                                        <button @click="editMustBuyItem(region.id, item, rIdx, iIdx)" class="text-slate-300 hover:text-lake text-xs mt-2"><i class="fas fa-pen"></i></button>
-                                    </div>
+                                <div class="flex flex-col space-y-2 items-center justify-center">
+                                    <a :href="getGoogleMapsLink(item.name + ' ' + (item.address || ''))" target="_blank" class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-500 hover:text-white transition-colors flex-shrink-0"><i class="fas fa-location-arrow text-xs"></i></a>
+                                    <button @click="editMustBuyItem(region.id, item, rIdx, iIdx)" class="text-slate-300 hover:text-lake text-xs mt-2 p-2"><i class="fas fa-pen"></i></button>
                                 </div>
                             </div>
                         </div>
@@ -211,27 +198,15 @@
                         </div>
                     </div>
                     <div class="space-y-2">
-                        <div v-for="(item, idx) in shoppingList" :key="item.id" class="swipe-item-container bg-white rounded-xl shadow-sm border border-slate-50 overflow-hidden mb-2">
-                            <div class="swipe-actions">
-                                <button @click="deleteShopItem(item.id, idx)" class="bg-red-500 text-white w-20 flex items-center justify-center font-bold h-full absolute right-0">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                            <div class="swipe-content p-3 flex items-center justify-between bg-white h-full"
-                                 :style="{ transform: 'translateX(' + (item.swipeOffset || 0) + 'px)' }"
-                                 @touchstart="touchStart($event, item)" 
-                                 @touchmove="touchMove($event, item)" 
-                                 @touchend="touchEnd($event, item)">
-                                
-                                <div class="flex items-center space-x-3 flex-1 overflow-hidden">
-                                    <button @click="toggleShopCheck(item, idx)" class="w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors" :class="item.checked ? 'bg-lake border-lake text-white' : 'border-slate-300 text-transparent'"><i class="fas fa-check text-xs"></i></button>
-                                    <div :class="{'line-through-gray': item.checked}" class="truncate">
-                                        <p class="font-bold text-slate-700 truncate">{{ item.name }} <span class="text-lake text-xs ml-1">x{{ item.qty }}</span></p>
-                                        <p v-if="item.note" class="text-xs text-slate-400 truncate">{{ item.note }}</p>
-                                    </div>
+                        <div v-for="(item, idx) in shoppingList" :key="item.id" class="bg-white p-3 rounded-xl shadow-sm border border-slate-50 flex items-center justify-between">
+                            <div class="flex items-center space-x-3 flex-1 overflow-hidden">
+                                <button @click="toggleShopCheck(item, idx)" class="w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors" :class="item.checked ? 'bg-lake border-lake text-white' : 'border-slate-300 text-transparent'"><i class="fas fa-check text-xs"></i></button>
+                                <div :class="{'line-through-gray': item.checked}" class="truncate">
+                                    <p class="font-bold text-slate-700 truncate">{{ item.name }} <span class="text-lake text-xs ml-1">x{{ item.qty }}</span></p>
+                                    <p v-if="item.note" class="text-xs text-slate-400 truncate">{{ item.note }}</p>
                                 </div>
-                                <div class="text-xs text-slate-300 ml-2 flex-shrink-0"><i class="fas fa-chevron-left"></i> 滑動</div>
                             </div>
+                            <button @click="editShopItem(item)" class="text-slate-300 hover:text-lake px-2 py-2"><i class="fas fa-pen"></i></button>
                         </div>
                     </div>
                 </div>
@@ -260,29 +235,17 @@
                                 <span class="text-xs font-bold text-lake">NT$ {{ formatNumber(dayGroup.totalTwd) }}</span>
                             </div>
                             <div class="space-y-2">
-                                <div v-for="(exp, idx) in dayGroup.items" :key="exp.id" class="swipe-item-container bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                    <div class="swipe-actions">
-                                        <button @click="deleteExpense(exp.id, idx)" class="bg-red-500 text-white w-20 flex items-center justify-center font-bold h-full absolute right-0">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                <div v-for="exp in dayGroup.items" :key="exp.id" @click="editExpense(exp)" class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center cursor-pointer active:scale-[0.98] transition-transform">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center text-lg"><i :class="getCategoryIcon(exp.category)"></i></div>
+                                        <div>
+                                            <p class="font-bold text-slate-700">{{ exp.item }}</p>
+                                            <p class="text-[10px] text-slate-400 uppercase">{{ exp.category }}</p>
+                                        </div>
                                     </div>
-                                    <div class="swipe-content p-3 flex justify-between items-center bg-white h-full"
-                                         :style="{ transform: 'translateX(' + (exp.swipeOffset || 0) + 'px)' }"
-                                         @touchstart="touchStart($event, exp)" 
-                                         @touchmove="touchMove($event, exp)" 
-                                         @touchend="touchEnd($event, exp)">
-                                        
-                                        <div class="flex items-center space-x-3">
-                                            <div class="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center text-lg"><i :class="getCategoryIcon(exp.category)"></i></div>
-                                            <div>
-                                                <p class="font-bold text-slate-700">{{ exp.item }}</p>
-                                                <p class="text-[10px] text-slate-400 uppercase">{{ exp.category }}</p>
-                                            </div>
-                                        </div>
-                                        <div class="text-right">
-                                            <p class="font-bold text-slate-800">{{ exp.currency === 'JPY' ? '¥' : 'NT$' }} {{ formatNumber(exp.amount) }}</p>
-                                            <p class="text-[10px] text-slate-400">{{ exp.currency === 'JPY' ? `≈ NT$ ${formatNumber(Math.round(exp.amount * exchangeRate))}` : '(台幣)' }}</p>
-                                        </div>
+                                    <div class="text-right">
+                                        <p class="font-bold text-slate-800">{{ exp.currency === 'JPY' ? '¥' : 'NT$' }} {{ formatNumber(exp.amount) }}</p>
+                                        <p class="text-[10px] text-slate-400">{{ exp.currency === 'JPY' ? `≈ NT$ ${formatNumber(Math.round(exp.amount * exchangeRate))}` : '(台幣)' }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -317,8 +280,10 @@
             </transition>
         </main>
 
-        <!-- 浮動按鈕 -->
+        <!-- 浮動按鈕 (行程頁用) -->
         <button v-if="currentTab === 'itinerary'" @click="openAddModal" class="absolute bottom-24 right-5 w-14 h-14 bg-lake text-white rounded-full shadow-xl shadow-teal-500/30 flex items-center justify-center z-30 transform transition active:scale-90 hover:scale-105"><i class="fas fa-plus text-xl"></i></button>
+        
+        <!-- 浮動按鈕 (記帳頁 - 底部備用) -->
         <button v-if="currentTab === 'accounting'" @click="openExpenseModal" class="absolute bottom-24 right-5 w-14 h-14 bg-slate-800 text-white rounded-full shadow-xl shadow-slate-900/30 flex items-center justify-center z-30 transform transition active:scale-90 hover:scale-105"><i class="fas fa-plus text-xl"></i></button>
 
         <!-- 底部導航 -->
@@ -330,9 +295,10 @@
         </nav>
 
         <!-- Modals -->
+        <!-- Expense Modal -->
         <div v-if="showExpenseModal" class="absolute inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm">
             <div class="bg-white w-full sm:w-10/12 rounded-t-3xl sm:rounded-2xl p-6 animate-slide-up">
-                <h3 class="text-xl font-bold mb-4 text-slate-800">記一筆</h3>
+                <h3 class="text-xl font-bold mb-4 text-slate-800">{{ isEditingExpense ? '編輯支出' : '記一筆' }}</h3>
                 <div class="space-y-4">
                     <div class="flex space-x-3">
                         <input v-model="expenseForm.date" type="date" class="flex-1 bg-slate-50 border-none rounded-xl p-3 text-slate-700">
@@ -347,11 +313,30 @@
                     <input v-model="expenseForm.item" type="text" placeholder="項目" class="w-full bg-slate-50 border-none rounded-xl p-3 text-slate-700">
                     <input v-model.number="expenseForm.amount" type="number" placeholder="金額" class="w-full bg-slate-50 border-none rounded-xl p-3 text-slate-700">
                     <button @click="saveExpense" class="w-full py-3 rounded-xl bg-lake text-white font-bold shadow-lg">儲存</button>
+                    <button v-if="isEditingExpense" @click="deleteExpense(editingExpenseId); showExpenseModal=false" class="w-full py-2 text-red-400 font-bold">刪除此支出</button>
                     <button @click="showExpenseModal = false" class="w-full py-2 text-slate-400 font-bold">取消</button>
                 </div>
             </div>
         </div>
 
+        <!-- Shopping Edit Modal -->
+        <div v-if="showShopModal" class="absolute inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+            <div class="bg-white w-10/12 rounded-2xl p-6 animate-slide-up shadow-xl">
+                <h3 class="text-xl font-bold mb-4 text-slate-800">編輯購物項目</h3>
+                <div class="space-y-3">
+                    <input v-model="shopForm.name" placeholder="品名" class="w-full bg-slate-50 border-none rounded-xl p-3">
+                    <div class="flex space-x-2">
+                        <input v-model="shopForm.qty" type="number" placeholder="數量" class="w-20 bg-slate-50 border-none rounded-xl p-3">
+                        <input v-model="shopForm.note" placeholder="備註" class="flex-1 bg-slate-50 border-none rounded-xl p-3">
+                    </div>
+                    <button @click="saveShopItem" class="w-full py-3 rounded-xl bg-lake text-white font-bold">儲存</button>
+                    <button @click="deleteShopItem(editingShopId); showShopModal=false" class="w-full py-2 text-red-400 font-bold">刪除此項目</button>
+                    <button @click="showShopModal = false" class="w-full py-2 text-slate-400 font-bold">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Itinerary Modal -->
         <div v-if="showModal" class="absolute inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm">
             <div class="bg-white w-full sm:w-10/12 rounded-t-3xl sm:rounded-2xl p-6 animate-slide-up h-[80vh] overflow-y-auto">
                 <h3 class="text-xl font-bold mb-4 text-slate-800">{{ isEditing ? '編輯行程' : '新增行程' }}</h3>
@@ -375,6 +360,7 @@
             </div>
         </div>
 
+        <!-- MustBuy Modal -->
         <div v-if="showMustBuyModal" class="absolute inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
             <div class="bg-white w-10/12 rounded-2xl p-6 animate-slide-up shadow-xl">
                 <h3 class="text-xl font-bold mb-4">{{ isEditingMustBuy ? '編輯商品' : '新增商品' }}</h3>
@@ -384,16 +370,19 @@
                     <input v-model="mustBuyForm.address" placeholder="地址 (導航用)" class="w-full bg-slate-50 border-none rounded-xl p-3">
                     <input v-model="mustBuyForm.icon" placeholder="Emoji 圖示" class="w-full bg-slate-50 border-none rounded-xl p-3">
                     <button @click="saveMustBuyItem" class="w-full py-3 rounded-xl bg-lake text-white font-bold">儲存</button>
+                    <button v-if="isEditingMustBuy" @click="deleteMustBuyItem(editingMustBuyIndices.regionId, editingMustBuyIndices.itemId, editingMustBuyIndices.itemIndex); showMustBuyModal=false" class="w-full py-2 text-red-400 font-bold">刪除此商品</button>
                     <button @click="showMustBuyModal = false" class="w-full py-2 text-slate-400 font-bold">取消</button>
                 </div>
             </div>
         </div>
 
+        <!-- Region Modal -->
         <div v-if="showRegionModal" class="absolute inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
             <div class="bg-white w-10/12 rounded-2xl p-6 animate-slide-up shadow-xl">
                 <h3 class="text-xl font-bold mb-4">{{ regionForm.index !== null ? '修改區域' : '新增區域' }}</h3>
                 <input v-model="regionForm.name" placeholder="區域名稱" class="w-full bg-slate-50 border-none rounded-xl p-3 mb-3">
                 <button @click="saveRegion" class="w-full py-3 rounded-xl bg-lake text-white font-bold">儲存</button>
+                <button v-if="regionForm.id" @click="deleteRegion(regionForm.id, regionForm.index); showRegionModal=false" class="w-full py-2 text-red-400 font-bold">刪除此區域</button>
                 <button @click="showRegionModal = false" class="w-full py-2 text-slate-400 font-bold">取消</button>
             </div>
         </div>
@@ -423,7 +412,7 @@
         let db = null;
         let auth = null;
 
-        // 1. Default Data (Local Seed)
+        // 1. Default Data
         const startDate = new Date(2025, 11, 15);
         const getDateStr = (offset) => {
             const d = new Date(startDate);
@@ -431,7 +420,6 @@
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         };
 
-        // 預設行程 (複製以確保離線可用)
         const DEFAULT_TRIPS = [
             { date: getDateStr(0), time: '11:50', type: 'transport', location: '桃園機場起飛', address: '桃園市大園區', note: 'JX862 飛往仙台', guide: '請至少提前 2.5 小時抵達機場。', lat: 25.0797, lng: 121.2342, temp: 20, weatherIcon: 'fas fa-plane-departure', showGuide: false },
             { date: getDateStr(0), time: '16:00', type: 'transport', location: '抵達仙台機場', address: '宮城県名取市下増田南原', note: '搭乘仙台機場 Access 線', guide: '出關後跟著「鉄道」指標走。Access 線有分快速 (17分) 和普通 (25分)，票價皆為 660日圓。', lat: 38.1398, lng: 140.9170, temp: 6, weatherIcon: 'fas fa-plane-arrival', showGuide: false },
@@ -492,39 +480,45 @@
         ];
 
         const DEFAULT_EXPENSES = [
-            { date: getDateStr(0), item: '機場快線', amount: 660, currency: 'JPY', category: 'transport', swipeOffset: 0 },
-            { date: getDateStr(1), item: '山寺參拜費', amount: 300, currency: 'JPY', category: 'ticket', swipeOffset: 0 }
+            { date: getDateStr(0), item: '機場快線', amount: 660, currency: 'JPY', category: 'transport' },
+            { date: getDateStr(1), item: '山寺參拜費', amount: 300, currency: 'JPY', category: 'ticket' }
         ];
 
         createApp({
             setup() {
-                // State
+                // Refs
                 const currentTab = ref('itinerary');
                 const viewMode = ref('list');
                 const isLoading = ref(true);
                 const isOnline = ref(false);
                 
                 // Modals
-                const showModal = ref(false), showExpenseModal = ref(false), showMustBuyModal = ref(false), showRegionModal = ref(false);
+                const showModal = ref(false), showExpenseModal = ref(false), showMustBuyModal = ref(false), showRegionModal = ref(false), showShopModal = ref(false);
+                
+                // Editing States
                 const isEditing = ref(false), editingId = ref(null);
                 const isEditingMustBuy = ref(false), editingMustBuyIndices = ref({ regionId: null, itemId: null, itemIndex: null });
+                const isEditingExpense = ref(false), editingExpenseId = ref(null);
+                const isEditingShop = ref(false), editingShopId = ref(null);
                 const regionForm = ref({ name: '', id: null });
-                
+
+                // Data Arrays
+                const trips = ref(JSON.parse(JSON.stringify(DEFAULT_TRIPS)));
+                const mustBuyList = ref(JSON.parse(JSON.stringify(DEFAULT_MUST_BUY)));
+                const shoppingList = ref([{ id: Date.now(), name: 'EVE 止痛藥', qty: 2, note: '藍色', checked: false }]);
+                const expenses = ref(JSON.parse(JSON.stringify(DEFAULT_EXPENSES)));
+
                 // Forms
                 const form = ref({ time: '', type: 'sightseeing', location: '', address: '', note: '', guide: '' });
                 const expenseForm = ref({ date: getDateStr(0), item: '', amount: '', currency: 'JPY', category: 'food' });
                 const mustBuyForm = ref({ name: '', desc: '', address: '', icon: '🛍️' });
                 const newShopItem = ref({ name: '', qty: 1, note: '' });
+                const shopForm = ref({ name: '', qty: 1, note: '' });
+                
+                // Tools
                 const showRateEdit = ref(false), exchangeRate = ref(0.215), converterJpy = ref(null);
 
-                // Data - Initialize with Defaults immediately!
-                // JSON.parse/stringify to deep copy
-                const trips = ref(JSON.parse(JSON.stringify(DEFAULT_TRIPS)));
-                const mustBuyList = ref(JSON.parse(JSON.stringify(DEFAULT_MUST_BUY)));
-                const shoppingList = ref([{ id: Date.now(), name: 'EVE 止痛藥', qty: 2, note: '藍色', checked: false, swipeOffset: 0 }]);
-                const expenses = ref(JSON.parse(JSON.stringify(DEFAULT_EXPENSES)));
-
-                // Dates
+                // Dates Logic
                 const days = ref([]);
                 for(let i=0; i<5; i++) {
                     const d = new Date(startDate);
@@ -537,53 +531,262 @@
                 }
                 const selectedDate = ref(days.value[0].date);
 
-                // Firebase Init
+                // --- Firebase Logic (Protected) ---
                 const initFirebase = async () => {
+                    if (!firebaseConfig) {
+                         console.warn("Firebase config not found. Running in offline mode.");
+                         isLoading.value = false;
+                         return;
+                    }
                     try {
-                        if (!firebaseConfig) throw new Error("No config");
                         const app = initializeApp(firebaseConfig);
                         db = getFirestore(app);
                         auth = getAuth(app);
-                        
+
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
                             await signInAnonymously(auth);
                         }
-                        
-                        onAuthStateChanged(auth, (user) => {
+
+                        onAuthStateChanged(auth, async (user) => {
                             if (user) {
                                 isOnline.value = true;
-                                syncData(); // Start sync
+                                await syncData();
                             }
                         });
-                    } catch (e) {
-                        console.warn("Firebase init failed, using offline mode:", e);
-                        isLoading.value = false; // Stop loading spinner, show local data
+                    } catch (error) {
+                        console.error("Firebase init error:", error);
+                        isLoading.value = false; // Fallback to local
                     }
                 };
 
-                const syncData = () => {
+                const syncData = async () => {
                     const pathBase = `artifacts/${appId}/public/data`;
                     
-                    onSnapshot(collection(db, pathBase, 'trips'), (snapshot) => {
-                        if (!snapshot.empty) trips.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                        else { /* First time? seed DB? Optional */ }
+                    // 1. Trips
+                    const tripsRef = collection(db, pathBase, 'trips');
+                    onSnapshot(tripsRef, (snapshot) => {
+                        if (snapshot.empty) {
+                             if(trips.value.length > 0) {
+                                 const batch = writeBatch(db);
+                                 trips.value.forEach(t => batch.set(doc(tripsRef), t));
+                                 batch.commit();
+                             }
+                        } else {
+                            trips.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        }
                         isLoading.value = false;
                     });
 
-                    onSnapshot(collection(db, pathBase, 'must_buy_regions'), (snapshot) => {
-                        if (!snapshot.empty) mustBuyList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    // 2. Must Buys
+                    const mbRef = collection(db, pathBase, 'must_buy_regions');
+                    onSnapshot(mbRef, (snapshot) => {
+                         if (snapshot.empty && mustBuyList.value.length > 0) {
+                             const batch = writeBatch(db);
+                             mustBuyList.value.forEach(r => batch.set(doc(mbRef), r));
+                             batch.commit();
+                         } else if (!snapshot.empty) {
+                             mustBuyList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                         }
                     });
 
-                    onSnapshot(collection(db, pathBase, 'expenses'), (snapshot) => {
-                        if (!snapshot.empty) expenses.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    // 3. Expenses
+                    const expRef = collection(db, pathBase, 'expenses');
+                    onSnapshot(expRef, (snapshot) => {
+                        if (snapshot.empty && expenses.value.length > 0) {
+                             const batch = writeBatch(db);
+                             expenses.value.forEach(e => batch.set(doc(expRef), e));
+                             batch.commit();
+                        } else if (!snapshot.empty) {
+                            expenses.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        }
                     });
 
-                    onSnapshot(collection(db, pathBase, 'shopping'), (snapshot) => {
+                    // 4. Shopping
+                    const shopRef = collection(db, pathBase, 'shopping');
+                    onSnapshot(shopRef, (snapshot) => {
                          if(!snapshot.empty) shoppingList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                     });
                 };
+
+                // --- CRUD Actions (Hybrid) ---
+                const saveItem = async () => {
+                    const data = { date: selectedDate.value, ...form.value, temp: 5, weatherIcon: 'fas fa-cloud', showGuide: false };
+                    if (isEditing.value && editingId.value) {
+                         const idx = trips.value.findIndex(t => t.id === editingId.value);
+                         if(idx !== -1) trips.value[idx] = { ...trips.value[idx], ...data };
+                         if(isOnline.value) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'trips', editingId.value), data);
+                    } else {
+                         const newId = Date.now().toString();
+                         const newItem = { ...data, id: newId };
+                         trips.value.push(newItem);
+                         if(isOnline.value) await addDoc(collection(db, `artifacts/${appId}/public/data`, 'trips'), data);
+                    }
+                    showModal.value = false;
+                };
+                const deleteItem = async (id) => { 
+                    if(!confirm('刪除?')) return;
+                    trips.value = trips.value.filter(t => t.id !== id);
+                    if(isOnline.value) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'trips', id)); 
+                };
+
+                const saveExpense = async () => {
+                    if(!expenseForm.value.item) return;
+                    const data = { ...expenseForm.value };
+                    if(isEditingExpense.value && editingExpenseId.value) {
+                        const idx = expenses.value.findIndex(e => e.id === editingExpenseId.value);
+                        if(idx !== -1) expenses.value[idx] = { ...expenses.value[idx], ...data };
+                        if(isOnline.value) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'expenses', editingExpenseId.value), data);
+                    } else {
+                        const newId = Date.now().toString();
+                        expenses.value.push({...data, id: newId});
+                        if(isOnline.value) await addDoc(collection(db, `artifacts/${appId}/public/data`, 'expenses'), data);
+                    }
+                    showExpenseModal.value = false;
+                };
+                const deleteExpense = async (id) => { 
+                    if(!confirm('刪除?')) return;
+                    expenses.value = expenses.value.filter(e => e.id !== id);
+                    if(isOnline.value) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'expenses', id)); 
+                };
+                const editExpense = (exp) => {
+                    isEditingExpense.value = true;
+                    editingExpenseId.value = exp.id;
+                    expenseForm.value = { ...exp };
+                    showExpenseModal.value = true;
+                };
+                const openExpenseModal = () => {
+                     isEditingExpense.value = false;
+                     editingExpenseId.value = null;
+                     expenseForm.value = { date: selectedDate.value, item: '', amount: '', currency: 'JPY', category: 'food' };
+                     showExpenseModal.value = true; 
+                };
+
+                const saveRegion = async () => {
+                    if (!regionForm.value.name) return;
+                    if (regionForm.value.id) {
+                        const idx = mustBuyList.value.findIndex(r => r.id === regionForm.value.id);
+                        if(idx !== -1) mustBuyList.value[idx].area = regionForm.value.name;
+                        if(isOnline.value) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', regionForm.value.id), { area: regionForm.value.name });
+                    } else {
+                        const newRegion = { area: regionForm.value.name, items: [], id: Date.now().toString() };
+                        mustBuyList.value.push(newRegion);
+                        if(isOnline.value) await addDoc(collection(db, `artifacts/${appId}/public/data`, 'must_buy_regions'), { area: regionForm.value.name, items: [] });
+                    }
+                    showRegionModal.value = false;
+                };
+                const deleteRegion = async (id, idx) => {
+                    if(!confirm('刪除?')) return;
+                    mustBuyList.value.splice(idx, 1);
+                    if(isOnline.value) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', id));
+                };
+
+                const saveMustBuyItem = async () => {
+                    const { regionId, itemId, itemIndex } = editingMustBuyIndices.value;
+                    const region = mustBuyList.value.find(r => r.id === regionId);
+                    if (!region) return;
+                    
+                    const newItems = [...region.items];
+                    const newItem = { ...mustBuyForm.value };
+                    
+                    if (isEditingMustBuy.value && itemIndex !== null) {
+                        newItems[itemIndex] = newItem;
+                    } else {
+                        newItems.push(newItem);
+                    }
+                    
+                    const rIdx = mustBuyList.value.findIndex(r => r.id === regionId);
+                    mustBuyList.value[rIdx].items = newItems;
+
+                    if(isOnline.value) {
+                         await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', regionId), { items: newItems });
+                    }
+                    showMustBuyModal.value = false;
+                };
+                const deleteMustBuyItem = async (regionId, item, rIdx, iIdx) => {
+                     if(!confirm('刪除?')) return;
+                     mustBuyList.value[rIdx].items.splice(iIdx, 1);
+                     if(isOnline.value) {
+                         await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', regionId), { items: mustBuyList.value[rIdx].items });
+                     }
+                };
+                const openMustBuyModal = (regionId, rIdx) => {
+                    isEditingMustBuy.value = false;
+                    editingMustBuyIndices.value = { regionId, rIdx, itemId: null, itemIndex: null };
+                    mustBuyForm.value = { name: '', desc: '', address: '', icon: '🛍️' };
+                    showMustBuyModal.value = true;
+                };
+                const editMustBuyItem = (regionId, item, rIdx, iIdx) => {
+                    isEditingMustBuy.value = true;
+                    editingMustBuyIndices.value = { regionId, rIdx, itemId: item, itemIndex: iIdx };
+                    mustBuyForm.value = { ...item };
+                    showMustBuyModal.value = true;
+                };
+
+                const addShopItem = async () => {
+                    if(newShopItem.value.name) {
+                        const item = { ...newShopItem.value, checked: false, id: Date.now().toString() };
+                        shoppingList.value.push(item);
+                        newShopItem.value = { name: '', qty: 1, note: '' };
+                        if(isOnline.value) await addDoc(collection(db, `artifacts/${appId}/public/data`, 'shopping'), item);
+                    }
+                };
+                const editShopItem = (item) => {
+                    isEditingShop.value = true;
+                    editingShopId.value = item.id;
+                    shopForm.value = { ...item };
+                    showShopModal.value = true;
+                };
+                const saveShopItem = async () => {
+                     if(!shopForm.value.name) return;
+                     const idx = shoppingList.value.findIndex(i => i.id === editingShopId.value);
+                     if(idx !== -1) {
+                         shoppingList.value[idx] = { ...shoppingList.value[idx], ...shopForm.value };
+                         if(isOnline.value) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'shopping', editingShopId.value), shopForm.value);
+                     }
+                     showShopModal.value = false;
+                };
+                const toggleShopCheck = async (item, idx) => {
+                    item.checked = !item.checked;
+                    if(isOnline.value) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'shopping', item.id), { checked: item.checked });
+                };
+                const deleteShopItem = async (id) => {
+                     if(!confirm('刪除?')) return;
+                     shoppingList.value = shoppingList.value.filter(i => i.id !== id); 
+                     if(isOnline.value) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'shopping', id));
+                };
+                
+                const addRegion = () => { 
+                    regionForm.value = { name: '', id: null }; 
+                    showRegionModal.value = true; 
+                };
+                const editRegionName = (region) => { 
+                    regionForm.value = { name: region.area, id: region.id }; 
+                    showRegionModal.value = true; 
+                };
+
+                // --- Helpers ---
+                const getGoogleMapsLink = (loc) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`;
+                const toggleGuide = (id) => { const i = trips.value.find(t=>t.id===id); if(i) i.showGuide = !i.showGuide; };
+                const highlightKeywords = (text) => {
+                    if (!text) return '無內容';
+                    let processed = text.replace(/\n/g, '<br>');
+                    [['必吃', 'highlight-food'], ['必買', 'highlight-buy'], ['攻略', 'highlight-play'], ['預約', 'highlight-code']].forEach(([kw, cls]) => {
+                        processed = processed.replace(new RegExp(kw, 'g'), `<span class="${cls}">${kw}</span>`);
+                    });
+                    return processed.replace(/(預約代號[：:]?\s?[#A-Za-z0-9]+)/g, `<span class="highlight-code">$1</span>`);
+                };
+                const formatNumber = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                const formatDate = (d) => { const _d = new Date(d); return `${_d.getMonth()+1}/${_d.getDate()}`; };
+                const getTabName = (t) => ({itinerary:'行程', recommendations:'必買/必吃', shopping:'清單', accounting:'記帳', tools:'匯率'}[t]);
+                const getTabIcon = (t) => ({itinerary:'fas fa-calendar-alt', recommendations:'fas fa-star', shopping:'fas fa-shopping-cart', accounting:'fas fa-calculator', tools:'fas fa-coins'}[t]);
+                const getTypeColorClass = (t) => t==='sightseeing'?'type-sightseeing-border':(t==='food'?'type-food-border':'type-transport-border');
+                const getTypeBgClass = (t) => t==='sightseeing'?'type-sightseeing-bg type-sightseeing-text border-blue-200':(t==='food'?'type-food-bg type-food-text border-orange-200':'type-transport-bg type-transport-text border-slate-200');
+                const getTypeTextClass = (t) => t==='sightseeing'?'type-sightseeing-text':(t==='food'?'type-food-text':'type-transport-text');
+                const getTypeLabel = (t) => ({sightseeing:'景點', food:'美食', transport:'交通'}[t]);
+                const getCategoryIcon = (c) => ({food:'fas fa-utensils', transport:'fas fa-bus', shopping:'fas fa-shopping-bag', ticket:'fas fa-ticket-alt'}[c]||'fas fa-star');
+                const convertToTwd = (j) => j ? Math.round(j * exchangeRate.value) : 0;
 
                 // Computed
                 const getItineraryForSelectedDate = () => trips.value.filter(t => t.date === selectedDate.value).sort((a,b) => a.time.localeCompare(b.time));
@@ -604,160 +807,29 @@
                     return grouped;
                 });
 
-                // CRUD Operations (Hybrid: Local update + Async DB push)
-                const saveItem = async () => {
-                    const data = { date: selectedDate.value, ...form.value, temp: 5, weatherIcon: 'fas fa-cloud', showGuide: false };
-                    // Local update for instant feedback
-                    if(isEditing.value && editingId.value) {
-                         const idx = trips.value.findIndex(t => t.id === editingId.value);
-                         if(idx !== -1) trips.value[idx] = { ...trips.value[idx], ...data };
-                    } else {
-                         trips.value.push({ ...data, id: Date.now() });
-                    }
-                    showModal.value = false;
-                    
-                    // DB Update
-                    if(isOnline.value && db) {
-                        const col = collection(db, `artifacts/${appId}/public/data`, 'trips');
-                        if (isEditing.value && editingId.value) await updateDoc(doc(col, editingId.value), data);
-                        else await addDoc(col, data);
-                    }
-                };
-                const deleteItem = async (id) => { 
-                    if(!confirm('刪除?')) return;
-                    trips.value = trips.value.filter(t => t.id !== id);
-                    if(isOnline.value && db) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'trips', id)); 
-                };
-
-                // Same hybrid pattern for other actions...
-                const saveExpense = async () => {
-                    if(!expenseForm.value.item) return;
-                    const data = { ...expenseForm.value, swipeOffset: 0 };
-                    expenses.value.push({ ...data, id: Date.now() });
-                    showExpenseModal.value = false;
-                    if(isOnline.value && db) await addDoc(collection(db, `artifacts/${appId}/public/data`, 'expenses'), data);
-                };
-                const deleteExpense = async (id) => { 
-                    if(!confirm('刪除?')) return;
-                    expenses.value = expenses.value.filter(e => e.id !== id);
-                    if(isOnline.value && db) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'expenses', id)); 
-                };
-                const saveRegion = async () => {
-                     if(!regionForm.value.name) return;
-                     // Simplified for brevity - strictly needs DB ID for updates usually, so mainly supports Add in offline mode properly
-                     if(isOnline.value && db) {
-                        const col = collection(db, `artifacts/${appId}/public/data`, 'must_buy_regions');
-                        if(regionForm.value.id) await updateDoc(doc(col, regionForm.value.id), { area: regionForm.value.name });
-                        else await addDoc(col, { area: regionForm.value.name, items: [] });
-                     }
-                     showRegionModal.value = false;
-                };
-                const deleteRegion = async (id, idx) => {
-                    if(!confirm('刪除?')) return;
-                    mustBuyList.value.splice(idx, 1);
-                    if(isOnline.value && db) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', id));
-                };
-                const saveMustBuyItem = async () => {
-                    const { regionId, itemId, itemIndex } = editingMustBuyIndices.value;
-                    // Local update logic omitted for brevity, relying on sync for complex nested data or simplistic refresh
-                    if(isOnline.value && db) {
-                        const region = mustBuyList.value.find(r => r.id === regionId);
-                        if(!region) return;
-                        const newItems = [...region.items];
-                        const newItem = { ...mustBuyForm.value, swipeOffset: 0 };
-                        if(isEditingMustBuy.value && itemIndex !== null) newItems[itemIndex] = newItem; else newItems.push(newItem);
-                        await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', regionId), { items: newItems });
-                    }
-                    showMustBuyModal.value = false;
-                };
-                const deleteMustBuyItem = async (regionId, item, rIdx, iIdx) => {
-                     if(!confirm('刪除?')) return;
-                     // Local
-                     mustBuyList.value[rIdx].items.splice(iIdx, 1);
-                     // DB
-                     if(isOnline.value && db) {
-                         const region = mustBuyList.value.find(r => r.id === regionId);
-                         if(region) {
-                             const newItems = region.items.filter(i => i.name !== item.name); // Simple filter
-                             await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'must_buy_regions', regionId), { items: newItems });
-                         }
-                     }
-                };
-                const addShopItem = async () => {
-                    if(newShopItem.value.name) {
-                        const item = { ...newShopItem.value, checked: false, swipeOffset: 0, id: Date.now() };
-                        shoppingList.value.push(item);
-                        newShopItem.value = { name: '', qty: 1, note: '' };
-                        if(isOnline.value && db) await addDoc(collection(db, `artifacts/${appId}/public/data`, 'shopping'), item);
-                    }
-                };
-                const toggleShopCheck = async (item) => {
-                    item.checked = !item.checked;
-                    if(isOnline.value && db) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'shopping', item.id), { checked: item.checked });
-                };
-                const deleteShopItem = async (id) => {
-                     shoppingList.value = shoppingList.value.filter(i => i.id !== id);
-                     if(isOnline.value && db) await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'shopping', id));
-                };
-
-                // Swipe Logic
-                let touchStartX = 0;
-                const touchStart = (e, item) => { touchStartX = e.touches[0].clientX; };
-                const touchMove = (e, item) => { const diff = e.touches[0].clientX - touchStartX; if(diff < 0 && diff > -100) item.swipeOffset = diff; };
-                const touchEnd = (e, item) => { item.swipeOffset = item.swipeOffset < -40 ? -80 : 0; };
-
-                // Helpers
-                const getGoogleMapsLink = (loc) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`;
-                const toggleGuide = (id) => { const i = trips.value.find(t=>t.id===id); if(i) i.showGuide = !i.showGuide; };
-                const highlightKeywords = (text) => {
-                    if (!text) return '無內容';
-                    let processed = text.replace(/\n/g, '<br>');
-                    [['必吃', 'highlight-food'], ['必買', 'highlight-buy'], ['攻略', 'highlight-play'], ['預約', 'highlight-code']].forEach(([kw, cls]) => {
-                        processed = processed.replace(new RegExp(kw, 'g'), `<span class="${cls}">${kw}</span>`);
-                    });
-                    return processed.replace(/(預約代號[：:]?\s?[#A-Za-z0-9]+)/g, `<span class="highlight-code">$1</span>`);
-                };
-                const formatNumber = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-                const formatDate = (d) => { const _d = new Date(d); return `${_d.getMonth()+1}/${_d.getDate()}`; };
-                const getCategoryIcon = (c) => ({food:'fas fa-utensils', transport:'fas fa-bus', shopping:'fas fa-shopping-bag', ticket:'fas fa-ticket-alt'}[c]||'fas fa-star');
-                
-                // Navigation & Modals
+                // Navigation
                 const switchTab = (tab) => currentTab.value = tab;
-                const switchViewMode = (mode) => viewMode.value = mode;
                 const selectDate = (date) => selectedDate.value = date;
                 const openAddModal = () => { isEditing.value = false; form.value={time:'12:00', type:'sightseeing', location:'', address:'', note:'', guide:''}; showModal.value=true; };
                 const editItem = (item) => { isEditing.value = true; editingId.value = item.id; form.value={...item}; showModal.value=true; };
-                const openExpenseModal = () => { expenseForm.value={date:selectedDate.value, item:'', amount:'', currency:'JPY', category:'food'}; showExpenseModal.value=true; };
-                const addRegion = () => { regionForm.value={name:'', id:null}; showRegionModal.value=true; };
-                const editRegionName = (region) => { regionForm.value={name:region.area, id:region.id}; showRegionModal.value=true; };
-                const openMustBuyModal = (regionId) => { isEditingMustBuy.value=false; editingMustBuyIndices.value={regionId, itemId:null, itemIndex:null}; mustBuyForm.value={name:'', desc:'', address:'', icon:'🛍️'}; showMustBuyModal.value=true; };
-                const editMustBuyItem = (regionId, item, idx) => { isEditingMustBuy.value=true; editingMustBuyIndices.value={regionId, itemId:item, itemIndex:idx}; mustBuyForm.value={...item}; showMustBuyModal.value=true; };
-
-                // Styles helpers
-                const getTabName = (t) => ({itinerary:'行程', recommendations:'必買/必吃', shopping:'清單', accounting:'記帳', tools:'匯率'}[t]);
-                const getTabIcon = (t) => ({itinerary:'fas fa-calendar-alt', recommendations:'fas fa-star', shopping:'fas fa-shopping-cart', accounting:'fas fa-calculator', tools:'fas fa-coins'}[t]);
-                const getTypeColorClass = (t) => t==='sightseeing'?'type-sightseeing-border':(t==='food'?'type-food-border':'type-transport-border');
-                const getTypeBgClass = (t) => t==='sightseeing'?'type-sightseeing-bg type-sightseeing-text border-blue-200':(t==='food'?'type-food-bg type-food-text border-orange-200':'type-transport-bg type-transport-text border-slate-200');
-                const getTypeTextClass = (t) => t==='sightseeing'?'type-sightseeing-text':(t==='food'?'type-food-text':'type-transport-text');
-                const getTypeLabel = (t) => ({sightseeing:'景點', food:'美食', transport:'交通'}[t]);
 
                 onMounted(() => {
                     initFirebase();
                 });
 
                 return {
-                    currentTab, isLoading, isOnline, viewMode, showModal, showExpenseModal, showMustBuyModal, showRegionModal,
-                    isEditing, editingId, isEditingMustBuy, editingMustBuyIndices, regionForm,
-                    showRateEdit, exchangeRate, converterJpy, convertToTwd: (j) => j?Math.round(j*exchangeRate.value):0,
+                    currentTab, isLoading, isOnline, viewMode, showModal, showExpenseModal, showMustBuyModal, showRegionModal, showShopModal,
+                    isEditing, editingId, isEditingMustBuy, editingMustBuyIndices, regionForm, isEditingExpense, editingExpenseId, isEditingShop, editingShopId,
+                    showRateEdit, exchangeRate, converterJpy, convertToTwd,
                     newShopItem, shoppingList, mustBuyList,
-                    days, selectedDate, selectDate, currentFlight, trips, expenses, form, expenseForm, mustBuyForm,
+                    days, selectedDate, selectDate, currentFlight, trips, expenses, form, expenseForm, mustBuyForm, shopForm,
                     getItineraryForSelectedDate, groupedExpenses, totalExpenseTwd,
                     getGoogleMapsLink, toggleGuide, highlightKeywords, 
-                    saveItem, deleteItem, saveExpense, deleteExpense, saveRegion, deleteRegion, 
-                    saveMustBuyItem, deleteMustBuyItem, addShopItem, deleteShopItem, toggleShopCheck,
-                    switchTab, switchViewMode, getTabName, getTabIcon, getTypeColorClass, getTypeBgClass, getTypeTextClass, getTypeLabel, getCategoryIcon,
-                    openAddModal, editItem, openExpenseModal, addRegion, editRegionName, openMustBuyModal, editMustBuyItem,
-                    formatNumber, formatDate, touchStart, touchMove, touchEnd
+                    saveItem, deleteItem, saveExpense, deleteExpense, saveRegion, deleteRegion, openExpenseModal, editExpense,
+                    saveMustBuyItem, deleteMustBuyItem, addShopItem, deleteShopItem, toggleShopCheck, editShopItem, saveShopItem,
+                    switchTab, getTabName, getTabIcon, getTypeColorClass, getTypeBgClass, getTypeTextClass, getTypeLabel, getCategoryIcon,
+                    openAddModal, editItem, addRegion, editRegionName, openMustBuyModal, editMustBuyItem,
+                    formatNumber, formatDate
                 };
             }
         }).mount('#app');
