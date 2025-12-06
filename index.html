@@ -276,6 +276,15 @@
                         </div>
                         <input v-if="showRateEdit" type="number" step="0.001" v-model="exchangeRate" class="w-full mt-2 p-2 text-sm border rounded bg-white">
                     </div>
+                    
+                    <!-- 資料同步工具 -->
+                    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center"><i class="fas fa-sync-alt mr-2"></i>資料同步</h3>
+                        <p class="text-xs text-slate-500 mb-3">如果您沒看到新加入的預設行程（如老辣妹推薦），請點擊下方按鈕。</p>
+                        <button @click="forceSyncDefaults" class="w-full py-3 bg-lake text-white rounded-xl font-bold shadow-md hover:bg-opacity-90 transition-colors">
+                             匯入最新預設資料
+                        </button>
+                    </div>
                 </div>
             </transition>
         </main>
@@ -609,6 +618,20 @@
                          if(!snapshot.empty) shoppingList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                     });
                 };
+                
+                const forceSyncDefaults = async () => {
+                    if(!isOnline.value || !db) return;
+                    if(!confirm('這將會把預設行程、必買清單寫入資料庫，現有資料會被保留但可能會看到重複項目。確定嗎？')) return;
+                    
+                    const batch = writeBatch(db);
+                    const pathBase = `artifacts/${appId}/public/data`;
+                    
+                    DEFAULT_TRIPS.forEach(t => batch.set(doc(collection(db, pathBase, 'trips')), t));
+                    DEFAULT_MUST_BUY.forEach(r => batch.set(doc(collection(db, pathBase, 'must_buy_regions')), r));
+                    
+                    await batch.commit();
+                    alert('匯入完成！');
+                };
 
                 // --- CRUD Actions (Hybrid) ---
                 const saveItem = async () => {
@@ -807,8 +830,9 @@
                     return grouped;
                 });
 
-                // Navigation
+                // Navigation & Modals
                 const switchTab = (tab) => currentTab.value = tab;
+                const switchViewMode = (mode) => viewMode.value = mode;
                 const selectDate = (date) => selectedDate.value = date;
                 const openAddModal = () => { isEditing.value = false; form.value={time:'12:00', type:'sightseeing', location:'', address:'', note:'', guide:''}; showModal.value=true; };
                 const editItem = (item) => { isEditing.value = true; editingId.value = item.id; form.value={...item}; showModal.value=true; };
@@ -829,7 +853,7 @@
                     saveMustBuyItem, deleteMustBuyItem, addShopItem, deleteShopItem, toggleShopCheck, editShopItem, saveShopItem,
                     switchTab, getTabName, getTabIcon, getTypeColorClass, getTypeBgClass, getTypeTextClass, getTypeLabel, getCategoryIcon,
                     openAddModal, editItem, addRegion, editRegionName, openMustBuyModal, editMustBuyItem,
-                    formatNumber, formatDate
+                    formatNumber, formatDate, forceSyncDefaults
                 };
             }
         }).mount('#app');
