@@ -46,6 +46,21 @@
         input:focus, select:focus, textarea:focus { outline: none; border-color: #2DD4BF; ring: 2px; box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.2); }
         .line-through-gray { text-decoration: line-through; color: #9CA3AF; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+        /* 清單排序動畫 */
+        .list-move, 
+        .list-enter-active,
+        .list-leave-active {
+          transition: all 0.5s ease;
+        }
+        .list-enter-from,
+        .list-leave-to {
+          opacity: 0;
+          transform: translateX(30px);
+        }
+        .list-leave-active {
+          position: absolute;
+        }
     </style>
 </head>
 <body class="text-slate-600">
@@ -95,6 +110,33 @@
             <!-- 1. 行程 Tab -->
             <transition name="fade">
                 <div v-if="currentTab === 'itinerary'" class="h-full flex flex-col">
+                    
+                    <!-- 天氣 Widget -->
+                    <div class="bg-white p-4 border-b border-slate-100">
+                        <div class="flex justify-between items-baseline mb-3">
+                            <div>
+                                <h2 class="text-xl font-serif font-bold text-slate-800">{{ weatherLocationName }}</h2>
+                                <p class="text-xs text-slate-400">未來 24 小時預報</p>
+                            </div>
+                            <div class="text-[10px] text-slate-300 bg-slate-50 px-2 py-1 rounded">Open-Meteo</div>
+                        </div>
+                        <div class="flex space-x-6 overflow-x-auto scrollbar-hide pb-2">
+                            <div v-if="weatherLoading" class="flex space-x-6">
+                                <!-- 骨架屏 loading -->
+                                <div v-for="i in 6" :key="i" class="flex flex-col items-center space-y-2 min-w-[30px] animate-pulse">
+                                    <div class="w-8 h-3 bg-slate-100 rounded"></div>
+                                    <div class="w-6 h-6 bg-slate-100 rounded-full"></div>
+                                    <div class="w-6 h-4 bg-slate-100 rounded"></div>
+                                </div>
+                            </div>
+                            <div v-else v-for="(w, idx) in weatherData" :key="idx" class="flex flex-col items-center space-y-2 min-w-[36px] flex-shrink-0">
+                                <span class="text-xs text-slate-400 font-light">{{ w.time }}</span>
+                                <i :class="w.icon" class="text-lg text-slate-600"></i>
+                                <span class="text-sm font-bold text-slate-700">{{ w.temp }}°</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="p-5 pb-24 space-y-4">
                         <div v-if="isLoading" class="text-center py-10 text-slate-400 animate-pulse">
                              資料同步中...
@@ -111,10 +153,6 @@
                                         <div class="flex items-center space-x-2">
                                             <span v-if="item.time" class="font-bold text-lg" :class="getTypeTextClass(item.type)">{{ item.time }}</span>
                                             <span class="text-[10px] px-2 py-0.5 rounded-full border flex items-center" :class="getTypeBgClass(item.type)">{{ getTypeLabel(item.type) }}</span>
-                                        </div>
-                                        <div class="flex items-center space-x-1 text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded-md">
-                                            <i :class="item.weatherIcon" class="text-orange-400"></i>
-                                            <span class="font-bold">{{ item.temp }}°C</span>
                                         </div>
                                     </div>
                                     <h3 class="font-bold text-slate-800 text-lg flex items-center">{{ item.location }}</h3>
@@ -183,7 +221,7 @@
                 </div>
             </transition>
 
-            <!-- 3. 清單 Tab -->
+            <!-- 3. 清單 Tab (自動排序) -->
             <transition name="fade">
                 <div v-if="currentTab === 'shopping'" class="p-5 pb-24 space-y-4">
                     <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-3">
@@ -197,17 +235,19 @@
                              <button @click="addShopItem" class="bg-lake text-white px-4 rounded-xl font-bold text-sm shadow-md flex-shrink-0"><i class="fas fa-plus"></i></button>
                         </div>
                     </div>
-                    <div class="space-y-2">
-                        <div v-for="(item, idx) in shoppingList" :key="item.id" class="bg-white p-3 rounded-xl shadow-sm border border-slate-50 flex items-center justify-between">
-                            <div class="flex items-center space-x-3 flex-1 overflow-hidden">
-                                <button @click="toggleShopCheck(item, idx)" class="w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors" :class="item.checked ? 'bg-lake border-lake text-white' : 'border-slate-300 text-transparent'"><i class="fas fa-check text-xs"></i></button>
-                                <div :class="{'line-through-gray': item.checked}" class="truncate">
-                                    <p class="font-bold text-slate-700 truncate">{{ item.name }} <span class="text-lake text-xs ml-1">x{{ item.qty }}</span></p>
-                                    <p v-if="item.note" class="text-xs text-slate-400 truncate">{{ item.note }}</p>
+                    <div class="space-y-2 relative">
+                        <transition-group name="list">
+                            <div v-for="(item) in sortedShoppingList" :key="item.id" class="bg-white p-3 rounded-xl shadow-sm border border-slate-50 flex items-center justify-between">
+                                <div class="flex items-center space-x-3 flex-1 overflow-hidden">
+                                    <button @click="toggleShopCheck(item)" class="w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors" :class="item.checked ? 'bg-lake border-lake text-white' : 'border-slate-300 text-transparent'"><i class="fas fa-check text-xs"></i></button>
+                                    <div :class="{'line-through-gray': item.checked}" class="truncate">
+                                        <p class="font-bold text-slate-700 truncate">{{ item.name }} <span class="text-lake text-xs ml-1">x{{ item.qty }}</span></p>
+                                        <p v-if="item.note" class="text-xs text-slate-400 truncate">{{ item.note }}</p>
+                                    </div>
                                 </div>
+                                <button @click="editShopItem(item)" class="text-slate-300 hover:text-lake px-2 py-2"><i class="fas fa-pen"></i></button>
                             </div>
-                            <button @click="editShopItem(item)" class="text-slate-300 hover:text-lake px-2 py-2"><i class="fas fa-pen"></i></button>
-                        </div>
+                        </transition-group>
                     </div>
                 </div>
             </transition>
@@ -280,7 +320,7 @@
                     <!-- 資料同步工具 -->
                     <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
                         <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center"><i class="fas fa-sync-alt mr-2"></i>資料同步</h3>
-                        <p class="text-xs text-slate-500 mb-3">如果您沒看到新加入的預設行程（如老辣妹推薦），請點擊下方按鈕。</p>
+                        <p class="text-xs text-slate-500 mb-3">如果您沒看到新加入的預設行程，請點擊下方按鈕。</p>
                         <button @click="forceSyncDefaults" class="w-full py-3 bg-lake text-white rounded-xl font-bold shadow-md hover:bg-opacity-90 transition-colors">
                              🔄 匯入/更新 預設行程與清單
                         </button>
@@ -403,7 +443,7 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, writeBatch, getDocs } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { createApp, ref, computed, nextTick, onMounted } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+        import { createApp, ref, computed, nextTick, onMounted, watch } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
 
         // 0. Firebase Config
         const manualConfig = {
@@ -429,7 +469,6 @@
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         };
 
-        // 加上固定 ID 以便 Sync 時更新
         const DEFAULT_TRIPS = [
             { id: 't101', date: getDateStr(0), time: '11:50', type: 'transport', location: '桃園機場起飛', address: '桃園市大園區', note: 'JX862 飛往仙台', guide: '請至少提前 2.5 小時抵達機場。', lat: 25.0797, lng: 121.2342, temp: 20, weatherIcon: 'fas fa-plane-departure', showGuide: false },
             { id: 't102', date: getDateStr(0), time: '16:00', type: 'transport', location: '抵達仙台機場', address: '宮城県名取市下増田南原', note: '搭乘仙台機場 Access 線', guide: '出關後跟著「鉄道」指標走。Access 線有分快速 (17分) 和普通 (25分)，票價皆為 660日圓。', lat: 38.1398, lng: 140.9170, temp: 6, weatherIcon: 'fas fa-plane-arrival', showGuide: false },
@@ -490,9 +529,16 @@
         ];
 
         const DEFAULT_EXPENSES = [
-            { id: 'e1', date: getDateStr(0), item: '機場快線', amount: 660, currency: 'JPY', category: 'transport' },
-            { id: 'e2', date: getDateStr(1), item: '山寺參拜費', amount: 300, currency: 'JPY', category: 'ticket' }
+            { date: getDateStr(0), item: '機場快線', amount: 660, currency: 'JPY', category: 'transport' },
+            { date: getDateStr(1), item: '山寺參拜費', amount: 300, currency: 'JPY', category: 'ticket' }
         ];
+
+        // Locations for weather mapping
+        const LOCATIONS = {
+            default: { name: '仙台市', lat: 38.2682, lng: 140.8694 },
+            day2: { name: '山形縣 山寺', lat: 38.3123, lng: 140.4385 },
+            day3: { name: '宮城縣 松島', lat: 38.3693, lng: 141.0607 }
+        };
 
         createApp({
             setup() {
@@ -500,6 +546,11 @@
                 const currentTab = ref('itinerary');
                 const isLoading = ref(true);
                 const isOnline = ref(false);
+                
+                // Weather
+                const weatherData = ref([]);
+                const weatherLoading = ref(false);
+                const weatherLocationName = ref('仙台市');
                 
                 // Modals
                 const showModal = ref(false), showExpenseModal = ref(false), showMustBuyModal = ref(false), showRegionModal = ref(false), showShopModal = ref(false);
@@ -511,7 +562,7 @@
                 const isEditingShop = ref(false), editingShopId = ref(null);
                 const regionForm = ref({ name: '', id: null });
 
-                // Data Arrays (Local copies for immediate render)
+                // Data Arrays
                 const trips = ref(JSON.parse(JSON.stringify(DEFAULT_TRIPS)));
                 const mustBuyList = ref(JSON.parse(JSON.stringify(DEFAULT_MUST_BUY)));
                 const shoppingList = ref([{ id: Date.now(), name: 'EVE 止痛藥', qty: 2, note: '藍色', checked: false }]);
@@ -540,11 +591,63 @@
                 }
                 const selectedDate = ref(days.value[0].date);
 
+                // --- Weather Logic ---
+                const fetchWeather = async () => {
+                     weatherLoading.value = true;
+                     try {
+                         let loc = LOCATIONS.default;
+                         // Simple day check logic
+                         const dateIndex = days.value.findIndex(d => d.date === selectedDate.value);
+                         if(dateIndex === 1) loc = LOCATIONS.day2;
+                         else if(dateIndex === 2) loc = LOCATIONS.day3;
+                         
+                         weatherLocationName.value = loc.name;
+
+                         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&hourly=temperature_2m,weathercode&timezone=Asia%2FTokyo&forecast_days=2`);
+                         const data = await res.json();
+                         
+                         const now = new Date();
+                         const hourly = data.hourly;
+                         const mapped = [];
+                         
+                         for(let i=0; i<hourly.time.length; i++) {
+                             const t = new Date(hourly.time[i]);
+                             // Simple future check
+                             if (t >= now && mapped.length < 24) {
+                                 const code = hourly.weathercode[i];
+                                 let icon = 'fas fa-sun'; 
+                                 if(code >= 1 && code <= 3) icon = 'fas fa-cloud-sun';
+                                 else if(code >= 45 && code <= 48) icon = 'fas fa-smog';
+                                 else if(code >= 51 && code <= 67) icon = 'fas fa-cloud-rain';
+                                 else if(code >= 71 && code <= 77) icon = 'fas fa-snowflake';
+                                 else if(code >= 80 && code <= 82) icon = 'fas fa-cloud-showers-heavy';
+                                 else if(code >= 95) icon = 'fas fa-bolt';
+                                 
+                                 mapped.push({
+                                     time: `${t.getHours()}:00`,
+                                     temp: Math.round(hourly.temperature_2m[i]),
+                                     icon: icon
+                                 });
+                             }
+                         }
+                         weatherData.value = mapped;
+                     } catch (e) {
+                         console.error("Weather fetch failed", e);
+                     } finally {
+                         weatherLoading.value = false;
+                     }
+                };
+
+                // Watch for date change to update weather
+                watch(selectedDate, () => {
+                    fetchWeather();
+                });
+
                 // --- Firebase Logic ---
                 const initFirebase = async () => {
                     if (!firebaseConfig) {
-                         console.warn("Firebase config not found. Running in offline mode.");
                          isLoading.value = false;
+                         fetchWeather();
                          return;
                     }
                     try {
@@ -564,9 +667,11 @@
                                 await syncData();
                             }
                         });
+                        fetchWeather();
                     } catch (error) {
                         console.error("Firebase init error:", error);
                         isLoading.value = false;
+                        fetchWeather();
                     }
                 };
 
@@ -574,34 +679,20 @@
                     const pathBase = `artifacts/${appId}/public/data`;
                     
                     onSnapshot(collection(db, pathBase, 'trips'), (snapshot) => {
-                        if (snapshot.empty) {
-                             if(trips.value.length > 0) {
-                                 const batch = writeBatch(db);
-                                 trips.value.forEach(t => batch.set(doc(collection(db, pathBase, 'trips'), t.id), t));
-                                 batch.commit();
-                             }
-                        } else {
+                        if (!snapshot.empty) {
                             trips.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                         }
                         isLoading.value = false;
                     });
 
                     onSnapshot(collection(db, pathBase, 'must_buy_regions'), (snapshot) => {
-                         if (snapshot.empty && mustBuyList.value.length > 0) {
-                             const batch = writeBatch(db);
-                             mustBuyList.value.forEach(r => batch.set(doc(collection(db, pathBase, 'must_buy_regions'), r.id), r));
-                             batch.commit();
-                         } else if (!snapshot.empty) {
+                         if (!snapshot.empty) {
                              mustBuyList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                          }
                     });
 
                     onSnapshot(collection(db, pathBase, 'expenses'), (snapshot) => {
-                        if (snapshot.empty && expenses.value.length > 0) {
-                             const batch = writeBatch(db);
-                             expenses.value.forEach(e => batch.set(doc(collection(db, pathBase, 'expenses'), e.id), e));
-                             batch.commit();
-                        } else if (!snapshot.empty) {
+                        if (!snapshot.empty) {
                             expenses.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                         }
                     });
@@ -613,7 +704,7 @@
                 
                 const forceSyncDefaults = async () => {
                     if(!isOnline.value || !db) return;
-                    if(!confirm('這將會把預設行程、必買清單寫入資料庫，現有資料會被保留但可能會看到重複項目。確定嗎？')) return;
+                    if(!confirm('這將會把預設行程、必買清單寫入資料庫，現有資料會被保留。確定嗎？')) return;
                     
                     const batch = writeBatch(db);
                     const pathBase = `artifacts/${appId}/public/data`;
@@ -625,7 +716,7 @@
                     alert('匯入完成！');
                 };
 
-                // --- Actions ---
+                // --- CRUD Actions ---
                 const saveItem = async () => {
                     const data = { date: selectedDate.value, ...form.value, temp: 5, weatherIcon: 'fas fa-cloud', showGuide: false };
                     if (isEditing.value && editingId.value) {
@@ -762,7 +853,7 @@
                      }
                      showShopModal.value = false;
                 };
-                const toggleShopCheck = async (item, idx) => {
+                const toggleShopCheck = async (item) => {
                     item.checked = !item.checked;
                     if(isOnline.value) await updateDoc(doc(db, `artifacts/${appId}/public/data`, 'shopping', item.id), { checked: item.checked });
                 };
@@ -822,6 +913,14 @@
                     return grouped;
                 });
 
+                // Sorted Shopping List
+                const sortedShoppingList = computed(() => {
+                    return [...shoppingList.value].sort((a, b) => {
+                        if (a.checked === b.checked) return 0;
+                        return a.checked ? 1 : -1;
+                    });
+                });
+
                 // Navigation & Modals
                 const switchTab = (tab) => currentTab.value = tab;
                 const selectDate = (date) => selectedDate.value = date;
@@ -836,7 +935,7 @@
                     currentTab, isLoading, isOnline, showModal, showExpenseModal, showMustBuyModal, showRegionModal, showShopModal,
                     isEditing, editingId, isEditingMustBuy, editingMustBuyIndices, regionForm, isEditingExpense, editingExpenseId, isEditingShop, editingShopId,
                     showRateEdit, exchangeRate, converterJpy, convertToTwd,
-                    newShopItem, shoppingList, mustBuyList,
+                    newShopItem, shoppingList, sortedShoppingList, mustBuyList,
                     days, selectedDate, selectDate, currentFlight, trips, expenses, form, expenseForm, mustBuyForm, shopForm,
                     getItineraryForSelectedDate, groupedExpenses, totalExpenseTwd,
                     getGoogleMapsLink, toggleGuide, highlightKeywords, 
@@ -844,7 +943,7 @@
                     saveMustBuyItem, deleteMustBuyItem, addShopItem, deleteShopItem, toggleShopCheck, editShopItem, saveShopItem,
                     switchTab, getTabName, getTabIcon, getTypeColorClass, getTypeBgClass, getTypeTextClass, getTypeLabel, getCategoryIcon,
                     openAddModal, editItem, addRegion, editRegionName, openMustBuyModal, editMustBuyItem,
-                    formatNumber, formatDate, forceSyncDefaults
+                    formatNumber, formatDate, forceSyncDefaults, weatherData, weatherLoading, weatherLocationName
                 };
             }
         }).mount('#app');
